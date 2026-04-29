@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Darwin Postmortem Viewer — Lore</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      background: #0d1117;
+      color: #e6edf3;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    header {
+      border-bottom: 1px solid #21262d;
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      font-size: 1.8rem;
+      color: #58a6ff;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    header .meta {
+      color: #8b949e;
+      font-size: 0.85rem;
+      margin-top: 0.4rem;
+    }
+    .stats {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 1rem 1.5rem;
+      min-width: 140px;
+    }
+    .stat-card .num {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #58a6ff;
+    }
+    .stat-card .label {
+      font-size: 0.8rem;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    h2 {
+      font-size: 1.2rem;
+      color: #e6edf3;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .count {
+      background: #21262d;
+      color: #8b949e;
+      font-size: 0.8rem;
+      padding: 0.1rem 0.5rem;
+      border-radius: 20px;
+      font-weight: 400;
+    }
+    .subtitle {
+      color: #8b949e;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 2.5rem;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 0.875rem;
+    }
+    thead {
+      background: #21262d;
+    }
+    th {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      color: #8b949e;
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    th:hover { color: #e6edf3; }
+    .sort-icon { color: #30363d; }
+    td {
+      padding: 0.65rem 1rem;
+      border-top: 1px solid #21262d;
+      vertical-align: middle;
+    }
+    tr:hover td { background: #1c2128; }
+    code {
+      background: #21262d;
+      color: #79c0ff;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.8rem;
+    }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .sev-high { background: #3d1414; color: #f85149; border: 1px solid #f85149; }
+    .sev-med  { background: #2d1f00; color: #e3b341; border: 1px solid #e3b341; }
+    .sev-low  { background: #112d1f; color: #3fb950; border: 1px solid #3fb950; }
+    .kind { font-size: 0.65rem; padding: 0.05rem 0.4rem; margin-left: 0.4rem; border-radius: 3px; vertical-align: middle; letter-spacing: 0.04em; }
+    .kind-swap  { background: #0d2818; color: #56d364; }
+    .kind-retry { background: #1c1f24; color: #6e7681; }
+    .filter-bar { display: flex; align-items: center; gap: 1rem; margin: 0.5rem 0 1rem; padding: 0.6rem 1rem; background: #161b22; border: 1px solid #21262d; border-radius: 6px; font-size: 0.85rem; }
+    .filter-bar label { color: #8b949e; cursor: pointer; user-select: none; }
+    .filter-bar input[type=checkbox] { accent-color: #58a6ff; transform: translateY(1px); margin-right: 0.4rem; }
+    body.hide-retries tr[data-swap='0'] { display: none; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .ts { color: #8b949e; white-space: nowrap; }
+    footer {
+      color: #30363d;
+      font-size: 0.8rem;
+      margin-top: 2rem;
+      border-top: 1px solid #21262d;
+      padding-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Darwin Postmortem Viewer</h1>
+    <div class="meta">Powered by Lore &mdash; Generated 2026-04-29 06:42:44 UTC</div>
+  </header>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="num">67</div>
+      <div class="label">Postmortems</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">215</div>
+      <div class="label">Total Observations</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">3</div>
+      <div class="label">Data Gaps</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">4</div>
+      <div class="label">HIGH Severity</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">26</div>
+      <div class="label">Tool-Swap Recoveries</div>
+    </div>
+  </div>
+
+  <h2>Failure Postmortems <span class="count">67</span></h2>
+  <p class="subtitle">Each row is a clustered failure pattern with a confirmed recovery path. Click cluster ID to read the full postmortem.</p>
+  <div class="filter-bar">
+    <label><input type="checkbox" id="hide-retries" checked> Hide self-retries (same tool retried) — show only true tool-swap recoveries (26/67)</label>
+  </div>
+  <table id="pm-table">
+    <thead>
+      <tr>
+        <th onclick="sortTable('pm-table',0)">Cluster <span class="sort-icon">⇅</span></th>
+        <th onclick="sortTable('pm-table',1)">Error Class <span class="sort-icon">⇅</span></th>
+        <th onclick="sortTable('pm-table',2)" class="num">N Obs <span class="sort-icon">⇅</span></th>
+        <th onclick="sortTable('pm-table',3)">Severity <span class="sort-icon">⇅</span></th>
+        <th onclick="sortTable('pm-table',4)">Rejected → Chosen <span class="sort-icon">⇅</span></th>
+        <th onclick="sortTable('pm-table',5)" class="num">Delta <span class="sort-icon">⇅</span></th>
+        <th onclick="sortTable('pm-table',6)">First Seen <span class="sort-icon">⇅</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr data-swap='1'><td><a href='errcls_b4217a9b.md'><code>errcls_b4217a9b</code></a></td><td>2026_04_web_search_exa</td><td class='num'>24</td><td><span class='badge sev-high'>HIGH</span></td><td><code>mcp__exa__web_search_exa</code> → <code>WebSearch</code> <span class='kind kind-swap'>swap</span></td><td class='num'>8s</td><td class='ts'>2026-04-27 18:55:55 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_aac063e7.md'><code>errcls_aac063e7</code></a></td><td>credentials_authentication_32603</td><td class='num'>16</td><td><span class='badge sev-high'>HIGH</span></td><td><code>mcp__github__search_repositories</code> → <code>mcp__google-research__youtube_search</code> <span class='kind kind-swap'>swap</span></td><td class='num'>2s</td><td class='ts'>2026-04-27 18:55:41 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_faaba62b.md'><code>errcls_faaba62b</code></a></td><td>exit_code</td><td class='num'>14</td><td><span class='badge sev-high'>HIGH</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>1s</td><td class='ts'>2026-04-27 18:56:52 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_33cfc001.md'><code>errcls_33cfc001</code></a></td><td>active_invalid_your</td><td class='num'>10</td><td><span class='badge sev-high'>HIGH</span></td><td><code>mcp__perplexity__reason</code> → <code>mcp__ai-factory__factory_swarm</code> <span class='kind kind-swap'>swap</span></td><td class='num'>63s</td><td class='ts'>2026-04-27 20:22:06 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_9a9e90a7.md'><code>errcls_9a9e90a7</code></a></td><td>field_unsupported_parents</td><td class='num'>6</td><td><span class='badge sev-med'>MED</span></td><td><code>mcp__claude_ai_Google_Drive__search_files</code> → <code>mcp__claude_ai_Google_Drive__search_files</code> <span class='kind kind-retry'>retry</span></td><td class='num'>90s</td><td class='ts'>2026-04-28 19:01:50 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_02657b3d.md'><code>errcls_02657b3d</code></a></td><td>found_exit_code</td><td class='num'>5</td><td><span class='badge sev-med'>MED</span></td><td><code>Bash</code> → <code>WebSearch</code> <span class='kind kind-swap'>swap</span></td><td class='num'>5s</td><td class='ts'>2026-04-27 18:56:27 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_18179d3b.md'><code>errcls_18179d3b</code></a></td><td>another_exception_import</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>5s</td><td class='ts'>2026-04-26 17:51:49 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_19b37b29.md'><code>errcls_19b37b29</code></a></td><td>exit_code_redirect</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>9s</td><td class='ts'>2026-04-26 17:33:21 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_402ba890.md'><code>errcls_402ba890</code></a></td><td>code_really_files</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>8s</td><td class='ts'>2026-04-26 19:09:21 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_439489cc.md'><code>errcls_439489cc</code></a></td><td>exit_code</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>11s</td><td class='ts'>2026-04-28 23:24:42 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_4532d7de.md'><code>errcls_4532d7de</code></a></td><td>exit_exist_file</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>9s</td><td class='ts'>2026-04-27 23:07:22 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_6d570764.md'><code>errcls_6d570764</code></a></td><td>tail_exit_file</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>10s</td><td class='ts'>2026-04-27 22:25:45 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_820f429d.md'><code>errcls_820f429d</code></a></td><td>403_request_code</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>WebFetch</code> → <code>WebFetch</code> <span class='kind kind-retry'>retry</span></td><td class='num'>3s</td><td class='ts'>2026-04-28 19:15:37 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_9a81399c.md'><code>errcls_9a81399c</code></a></td><td>exit_file_no</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>13s</td><td class='ts'>2026-04-27 22:26:11 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_a4ab5e7b.md'><code>errcls_a4ab5e7b</code></a></td><td>exit_code</td><td class='num'>4</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Edit</code> <span class='kind kind-swap'>swap</span></td><td class='num'>10s</td><td class='ts'>2026-04-28 23:20:23 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_0bc50d4f.md'><code>errcls_0bc50d4f</code></a></td><td>import_matplotlib_rcsetup</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>4s</td><td class='ts'>2026-04-26 18:26:26 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_19b7940d.md'><code>errcls_19b7940d</code></a></td><td>code_files_such</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>4s</td><td class='ts'>2026-04-28 22:35:55 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_1bdbf65a.md'><code>errcls_1bdbf65a</code></a></td><td>token_be20_exit</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>9s</td><td class='ts'>2026-04-27 22:18:10 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_1d1eb27b.md'><code>errcls_1d1eb27b</code></a></td><td>eval_deliverables_replaces</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>9s</td><td class='ts'>2026-04-28 22:20:59 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_2369dc65.md'><code>errcls_2369dc65</code></a></td><td>import_stdin_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>10s</td><td class='ts'>2026-04-26 08:46:44 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_2687f98e.md'><code>errcls_2687f98e</code></a></td><td>another_code_unicodeencodeerror</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Read</code> <span class='kind kind-swap'>swap</span></td><td class='num'>25s</td><td class='ts'>2026-04-26 17:53:43 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_279c4e26.md'><code>errcls_279c4e26</code></a></td><td>chat_pushed_at_12</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>3s</td><td class='ts'>2026-04-27 18:58:15 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_2fab09c2.md'><code>errcls_2fab09c2</code></a></td><td>exit_ok_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>56s</td><td class='ts'>2026-04-27 22:16:17 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_355a3c58.md'><code>errcls_355a3c58</code></a></td><td>eval_code_unexpected</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>21s</td><td class='ts'>2026-04-26 19:57:28 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_39247c59.md'><code>errcls_39247c59</code></a></td><td>userwarning_12_fits</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>8s</td><td class='ts'>2026-04-26 17:43:12 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_39e8ec5d.md'><code>errcls_39e8ec5d</code></a></td><td>token_exit_jsonl</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>9s</td><td class='ts'>2026-04-27 20:16:44 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_3d2bc8cb.md'><code>errcls_3d2bc8cb</code></a></td><td>collections_ndata_stdin</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>7s</td><td class='ts'>2026-04-27 22:45:02 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_434e9739.md'><code>errcls_434e9739</code></a></td><td>commit_code_unexpected</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>8s</td><td class='ts'>2026-04-28 22:35:43 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_4352be31.md'><code>errcls_4352be31</code></a></td><td>colorbar_code_most</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>6s</td><td class='ts'>2026-04-26 18:13:37 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_4605223d.md'><code>errcls_4605223d</code></a></td><td>exit_critical_plugins</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>6s</td><td class='ts'>2026-04-27 20:14:54 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_4630884f.md'><code>errcls_4630884f</code></a></td><td>found_code_information</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>9s</td><td class='ts'>2026-04-28 18:51:44 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_4e543a13.md'><code>errcls_4e543a13</code></a></td><td>sample_asc_stdin</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>12s</td><td class='ts'>2026-04-26 19:02:43 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_53230045.md'><code>errcls_53230045</code></a></td><td>eval_deliverables_cm</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>7s</td><td class='ts'>2026-04-28 20:19:23 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_55cca773.md'><code>errcls_55cca773</code></a></td><td>stdin_code_items</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>6s</td><td class='ts'>2026-04-27 22:33:20 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_6543a58b.md'><code>errcls_6543a58b</code></a></td><td>error_exit_end</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>3s</td><td class='ts'>2026-04-27 20:12:34 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_6831fc69.md'><code>errcls_6831fc69</code></a></td><td>eval_naddress_commit</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>13s</td><td class='ts'>2026-04-28 22:36:02 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_74851397.md'><code>errcls_74851397</code></a></td><td>12_04_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>mcp__ai-factory__factory_swarm</code> <span class='kind kind-swap'>swap</span></td><td class='num'>110s</td><td class='ts'>2026-04-27 20:21:19 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_7a424cda.md'><code>errcls_7a424cda</code></a></td><td>apr_found_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>mcp__claude_ai_Google_Drive__read_file_content</code> <span class='kind kind-swap'>swap</span></td><td class='num'>102s</td><td class='ts'>2026-04-28 22:13:24 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_85ee5019.md'><code>errcls_85ee5019</code></a></td><td>but_change_check</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>9s</td><td class='ts'>2026-04-28 22:16:55 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_88402d4d.md'><code>errcls_88402d4d</code></a></td><td>found_exit_file</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Read</code> <span class='kind kind-swap'>swap</span></td><td class='num'>4s</td><td class='ts'>2026-04-28 22:29:34 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_8a7ef720.md'><code>errcls_8a7ef720</code></a></td><td>eval_commit_evolve</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>9s</td><td class='ts'>2026-04-28 19:14:31 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_8aa82bdc.md'><code>errcls_8aa82bdc</code></a></td><td>dsh_04_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>48s</td><td class='ts'>2026-04-26 08:47:55 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_8ae6ac34.md'><code>errcls_8ae6ac34</code></a></td><td>confidence_import_summary</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>22s</td><td class='ts'>2026-04-26 17:37:20 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_8e166bab.md'><code>errcls_8e166bab</code></a></td><td>input_file_arguments_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>8s</td><td class='ts'>2026-04-27 23:05:02 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_8ea7662d.md'><code>errcls_8ea7662d</code></a></td><td>04_146z_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>8s</td><td class='ts'>2026-04-27 22:15:52 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_8eaf668e.md'><code>errcls_8eaf668e</code></a></td><td>at_exit_stdin</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>6s</td><td class='ts'>2026-04-27 20:12:19 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_919f85eb.md'><code>errcls_919f85eb</code></a></td><td>error_exit_end</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>21s</td><td class='ts'>2026-04-27 19:56:13 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_a053d538.md'><code>errcls_a053d538</code></a></td><td>exit_code_variable</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>4s</td><td class='ts'>2026-04-28 20:18:31 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_a15723fc.md'><code>errcls_a15723fc</code></a></td><td>portions_maximum_search</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Read</code> → <code>Read</code> <span class='kind kind-retry'>retry</span></td><td class='num'>168s</td><td class='ts'>2026-04-27 22:19:29 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_a3afa421.md'><code>errcls_a3afa421</code></a></td><td>2026_web_search_advanced_exa_04</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>mcp__exa__web_search_advanced_exa</code> → <code>mcp__google-research__youtube_search</code> <span class='kind kind-swap'>swap</span></td><td class='num'>2s</td><td class='ts'>2026-04-28 18:24:19 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_a628dcaf.md'><code>errcls_a628dcaf</code></a></td><td>2026_04_web_search_exa</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>mcp__exa__web_search_exa</code> → <code>WebSearch</code> <span class='kind kind-swap'>swap</span></td><td class='num'>4s</td><td class='ts'>2026-04-28 19:15:06 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_abeb92cb.md'><code>errcls_abeb92cb</code></a></td><td>eval_matching_exit</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>12s</td><td class='ts'>2026-04-26 18:05:52 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_b06fbb2d.md'><code>errcls_b06fbb2d</code></a></td><td>eval_commit_04</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>5s</td><td class='ts'>2026-04-27 17:28:46 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_c68a5c73.md'><code>errcls_c68a5c73</code></a></td><td>final_code_working</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Edit</code> <span class='kind kind-swap'>swap</span></td><td class='num'>7s</td><td class='ts'>2026-04-28 22:35:35 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_c9025305.md'><code>errcls_c9025305</code></a></td><td>apr_04_log</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>13s</td><td class='ts'>2026-04-27 22:34:47 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_cfd14fb3.md'><code>errcls_cfd14fb3</code></a></td><td>since_04_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>27s</td><td class='ts'>2026-04-26 18:06:59 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_d51c3587.md'><code>errcls_d51c3587</code></a></td><td>code_learnn_unexpected</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Read</code> <span class='kind kind-swap'>swap</span></td><td class='num'>3s</td><td class='ts'>2026-04-28 16:51:09 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_d82dc010.md'><code>errcls_d82dc010</code></a></td><td>timed_operation_out</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>mcp__claude_ai_Google_Drive__download_file_content</code> → <code>Bash</code> <span class='kind kind-swap'>swap</span></td><td class='num'>12s</td><td class='ts'>2026-04-28 22:12:59 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_da13cb0c.md'><code>errcls_da13cb0c</code></a></td><td>nchore_days_nhealth</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>4s</td><td class='ts'>2026-04-27 19:34:11 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_dabb87d9.md'><code>errcls_dabb87d9</code></a></td><td>spec_first_directories</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>14s</td><td class='ts'>2026-04-28 19:02:20 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_e19cb39d.md'><code>errcls_e19cb39d</code></a></td><td>found_nn_04</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Write</code> <span class='kind kind-swap'>swap</span></td><td class='num'>15s</td><td class='ts'>2026-04-29 06:25:27 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_e8f2d9ab.md'><code>errcls_e8f2d9ab</code></a></td><td>exit_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Read</code> <span class='kind kind-swap'>swap</span></td><td class='num'>3s</td><td class='ts'>2026-04-26 18:26:58 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_f0e5976e.md'><code>errcls_f0e5976e</code></a></td><td>numberscruncher_exit_file</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>10s</td><td class='ts'>2026-04-26 18:35:36 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_f32d1c57.md'><code>errcls_f32d1c57</code></a></td><td>create_primary_code</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Read</code> <span class='kind kind-swap'>swap</span></td><td class='num'>40s</td><td class='ts'>2026-04-27 22:21:37 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_fce7048d.md'><code>errcls_fce7048d</code></a></td><td>argument_exit_126</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>30s</td><td class='ts'>2026-04-26 16:54:55 UTC</td></tr>
+<tr data-swap='0'><td><a href='errcls_fef5a6ab.md'><code>errcls_fef5a6ab</code></a></td><td>import_code_asciiusernamevalidator</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Bash</code> <span class='kind kind-retry'>retry</span></td><td class='num'>4s</td><td class='ts'>2026-04-26 17:30:21 UTC</td></tr>
+<tr data-swap='1'><td><a href='errcls_fef637f4.md'><code>errcls_fef637f4</code></a></td><td>module_django_call</td><td class='num'>2</td><td><span class='badge sev-low'>LOW</span></td><td><code>Bash</code> → <code>Read</code> <span class='kind kind-swap'>swap</span></td><td class='num'>29s</td><td class='ts'>2026-04-26 17:53:39 UTC</td></tr>
+    </tbody>
+  </table>
+
+  
+        <h2>Data Gaps <span class="count">3</span></h2>
+        <p class="subtitle">Sessions where failures occurred but no recovery was captured — prime candidates for proactive Lore intervention.</p>
+        <table id="gap-table">
+          <thead>
+            <tr>
+              <th onclick="sortTable('gap-table',0)">Session <span class="sort-icon">⇅</span></th>
+              <th onclick="sortTable('gap-table',1)">Tool Failed <span class="sort-icon">⇅</span></th>
+              <th onclick="sortTable('gap-table',2)">Error Preview <span class="sort-icon">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><a href='data-gap-36d06f83.md'><code>36d06f83-6995-49…</code></a></td><td><code>unknown</code></td><td></td></tr>
+<tr><td><a href='data-gap-770c9db9.md'><code>770c9db9-760c-46…</code></a></td><td><code>unknown</code></td><td></td></tr>
+<tr><td><a href='data-gap-abdc98d2.md'><code>abdc98d2-6bbf-45…</code></a></td><td><code>unknown</code></td><td></td></tr>
+          </tbody>
+        </table>
+
+
+  <footer>
+    Darwin Postmortem Engine &mdash; claude-brain &mdash; 2026-04-29 06:42:44 UTC
+  </footer>
+
+  <script>
+    function sortTable(tableId, col) {
+      const table = document.getElementById(tableId);
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const th = table.querySelectorAll('th')[col];
+      const asc = th.dataset.dir !== 'asc';
+      table.querySelectorAll('th').forEach(h => delete h.dataset.dir);
+      th.dataset.dir = asc ? 'asc' : 'desc';
+
+      rows.sort((a, b) => {
+        const va = a.cells[col].innerText.trim();
+        const vb = b.cells[col].innerText.trim();
+        const na = parseFloat(va), nb = parseFloat(vb);
+        if (!isNaN(na) && !isNaN(nb)) return asc ? na - nb : nb - na;
+        return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    }
+    (function() {
+      const cb = document.getElementById('hide-retries');
+      if (!cb) return;
+      const apply = () => document.body.classList.toggle('hide-retries', cb.checked);
+      cb.addEventListener('change', apply);
+      apply();
+    })();
+  </script>
+</body>
+</html>
